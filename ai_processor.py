@@ -13,16 +13,17 @@ def setup_ai():
         raise ValueError("❌ GEMINI_API_KEY is missing in .env")
     genai.configure(api_key=api_key)
 
-def generate_wallpaper_metadata(image_bytes: bytes) -> dict:
+def generate_wallpaper_metadata(image_path: str) -> dict:
     """
-    Takes an image, sends to Gemini Vision, and returns a dict with metadata.
+    Takes an image path, sends a resized version to Gemini Vision, and returns a dict with metadata.
     """
     try:
         # User API Key ONLY supports gemini-2.5-flash and gemini-2.0-flash variants
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # Prepare the image
-        img = Image.open(io.BytesIO(image_bytes))
+        # Prepare the image and resize to save memory
+        img = Image.open(image_path)
+        img.thumbnail((1024, 1024))
         
         prompt = """
         Analyze this image and provide metadata for a premium wallpaper website.
