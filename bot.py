@@ -76,6 +76,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Send early visual feedback
     msg = await update.message.reply_text("⚙️ Receiving image... Please wait.")
     
+    temp_file_path = None
     try:
         # Determine if it's a photo (compressed) or document (original)
         file_id = None
@@ -99,14 +100,16 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.edit_text("❌ Unknown media format.")
             return
             
-        # 1. Download file content from Telegram backend
+        temp_file_path = f"temp_{file_id}.{extension}"
+            
+        # 1. Download file content from Telegram backend to disk
         await msg.edit_text("⏳ Downloading image from Telegram servers...")
         telegram_file = await context.bot.get_file(file_id)
-        image_bytes = await telegram_file.download_as_bytearray()
+        await telegram_file.download_to_drive(temp_file_path)
         
         # 2. Process image with Google Gemini API
         await msg.edit_text("🧠 Analyzing image using AI for Title, Category, and Description...")
-        metadata = generate_wallpaper_metadata(image_bytes)
+        metadata = generate_wallpaper_metadata(temp_file_path)
         
         title = metadata.get("title", "Premium Wallpaper").strip()
         category = metadata.get("category", "Aesthetic").strip()
@@ -124,7 +127,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         supabase.storage.from_("image").upload(
             path=unique_filename, 
-            file=bytes(image_bytes),
+            file=temp_file_path,
             file_options={"content-type": f"image/{extension}"}
         )
         
@@ -159,6 +162,12 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error handling media: {e}")
         await msg.edit_text(f"❌ An error occurred during upload:\n`{e}`", parse_mode="Markdown")
+    finally:
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to clean up temp file: {cleanup_error}")
 
 def main():
     logger.info("🚀 Starting Wallpaper AI Auto-Uploader Bot alongside Flask...")
